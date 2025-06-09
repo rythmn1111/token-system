@@ -1,5 +1,5 @@
 // pages/desk/[deskNumber].tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../utils/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,7 +68,7 @@ export default function DeskPage() {
   }, [alert]);
 
   // Fetch desk data
-  const fetchDeskData = async () => {
+  const fetchDeskData = useCallback(async () => {
     if (!deskNumber) return;
 
     try {
@@ -116,7 +116,7 @@ export default function DeskPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [deskNumber]);
 
   // Complete token and free up desk
   const completeToken = async () => {
@@ -211,7 +211,7 @@ export default function DeskPage() {
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Desk Not Found</h2>
-            <p className="text-gray-600 mb-4">Desk {deskNumber} doesn't exist or is not active.</p>
+            <p className="text-gray-600 mb-4">Desk {deskNumber} doesn&apos;t exist or is not active.</p>
             <Button onClick={() => router.push('/display')} className="flex items-center space-x-2">
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Display</span>
