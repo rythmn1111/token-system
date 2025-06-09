@@ -180,7 +180,7 @@ export default function DeskPage() {
   // Initial data fetch
   useEffect(() => {
     fetchDeskData();
-  }, [deskNumber]);
+  }, [deskNumber, fetchDeskData]);
 
   // Auto-refresh every 10 seconds
   useEffect(() => {
@@ -189,7 +189,7 @@ export default function DeskPage() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [deskNumber]);
+  }, [deskNumber, fetchDeskData]);
 
   if (isLoading) {
     return (
