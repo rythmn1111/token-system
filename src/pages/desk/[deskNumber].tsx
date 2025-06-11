@@ -16,7 +16,7 @@ import {
   CheckCircle, 
   AlertCircle, 
   Loader2,
-//   RefreshCw,
+  RefreshCw,
   ArrowLeft,
   Calendar,
   Timer
@@ -36,6 +36,8 @@ interface Desk {
   id: number;
   desk_number: number;
   name: string;
+  operator_name: string;
+  total_tokens_served: number;
   status: 'free' | 'occupied' | 'maintenance';
   assigned_token_id: number | null;
   assigned_at: string | null;
@@ -180,7 +182,7 @@ export default function DeskPage() {
   // Initial data fetch
   useEffect(() => {
     fetchDeskData();
-  }, [deskNumber, fetchDeskData]);
+  }, [deskNumber]);
 
   // Auto-refresh every 10 seconds
   useEffect(() => {
@@ -189,7 +191,7 @@ export default function DeskPage() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [deskNumber, fetchDeskData]);
+  }, [deskNumber]);
 
   if (isLoading) {
     return (
@@ -243,7 +245,12 @@ export default function DeskPage() {
                   <Monitor className="h-8 w-8 text-blue-600" />
                   <span>{desk.name}</span>
                 </h1>
-                <p className="text-gray-600">Desk #{desk.desk_number} Status Dashboard</p>
+                <p className="text-gray-600">
+                  Desk #{desk.desk_number} | Operator: {desk.operator_name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Total Tokens Served: {desk.total_tokens_served}
+                </p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -299,6 +306,24 @@ export default function DeskPage() {
                 </div>
                 <h2 className="text-2xl font-semibold text-green-800 mb-2">Desk Available</h2>
                 <p className="text-green-700">This desk is currently free and ready for the next customer.</p>
+              </div>
+              
+              {/* Desk Info when Free */}
+              <div className="bg-white rounded-lg p-6 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-600 mb-1">Desk Number</p>
+                    <p className="text-xl font-bold text-blue-800">#{desk.desk_number}</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-600 mb-1">Operator</p>
+                    <p className="text-lg font-bold text-green-800">{desk.operator_name}</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-purple-600 mb-1">Tokens Served</p>
+                    <p className="text-xl font-bold text-purple-800">{desk.total_tokens_served}</p>
+                  </div>
+                </div>
               </div>
               
               <div className="bg-white rounded-lg p-4 text-gray-600">
@@ -389,7 +414,7 @@ export default function DeskPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <p className="text-sm text-blue-600 mb-1">Desk Number</p>
                     <p className="text-2xl font-bold text-blue-800">#{desk.desk_number}</p>
@@ -398,12 +423,20 @@ export default function DeskPage() {
                     <p className="text-sm text-orange-600 mb-1">Current Status</p>
                     <p className="text-lg font-bold text-orange-800">Occupied</p>
                   </div>
-                  <div className="text-center p-4 bg-purple-50 rounded-lg">
-                    <p className="text-sm text-purple-600 mb-1">Last Updated</p>
-                    <p className="text-sm font-medium text-purple-800">
-                      {lastUpdate.toLocaleTimeString()}
-                    </p>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-600 mb-1">Operator</p>
+                    <p className="text-lg font-bold text-green-800">{desk.operator_name}</p>
                   </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-purple-600 mb-1">Tokens Served</p>
+                    <p className="text-2xl font-bold text-purple-800">{desk.total_tokens_served}</p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600 text-center">
+                    Last Updated: {lastUpdate.toLocaleTimeString()}
+                  </p>
                 </div>
               </CardContent>
             </Card>

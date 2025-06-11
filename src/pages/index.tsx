@@ -1,6 +1,5 @@
 // pages/admin/tokens.tsx
 import { useState, useEffect } from 'react';
-import { supabase } from '../../utils/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, RotateCcw, CheckCircle, AlertCircle, MonitorSpeaker, Trash2 } from 'lucide-react';
+import { supabase } from '../../utils/supabase';
 
 interface Token {
   id: number;
@@ -34,6 +34,8 @@ interface Desk {
   id: number;
   desk_number: number;
   name: string;
+  operator_name: string;
+  total_tokens_served: number;
   is_active: boolean;
   created_at: string;
 }
@@ -44,7 +46,9 @@ interface DeskCounter {
 
 export default function AdminTokenPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeskDialogOpen, setIsDeskDialogOpen] = useState(false);
   const [tokenName, setTokenName] = useState('');
+  const [operatorName, setOperatorName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isAddingDesk, setIsAddingDesk] = useState(false);
@@ -232,6 +236,11 @@ export default function AdminTokenPage() {
   };
 
   const addDesk = async () => {
+    if (!operatorName.trim()) {
+      setAlert({ type: 'error', message: 'Please enter an operator name' });
+      return;
+    }
+
     setIsAddingDesk(true);
 
     try {
@@ -263,6 +272,8 @@ export default function AdminTokenPage() {
         .insert({
           desk_number: nextDeskNumber,
           name: `Desk ${nextDeskNumber}`,
+          operator_name: operatorName.trim(),
+          total_tokens_served: 0,
           is_active: true,
         })
         .select()
@@ -273,9 +284,11 @@ export default function AdminTokenPage() {
       // Update local state
       setDesks(prev => [...prev, deskData]);
       setDeskCounter({ last_desk_number: nextDeskNumber });
+      setOperatorName('');
+      setIsDeskDialogOpen(false);
       setAlert({ 
         type: 'success', 
-        message: `Desk ${nextDeskNumber} created successfully` 
+        message: `Desk ${nextDeskNumber} created successfully with operator "${operatorName.trim()}"` 
       });
 
     } catch (error) {
@@ -492,17 +505,13 @@ export default function AdminTokenPage() {
             <CardContent>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button 
-                  onClick={addDesk}
+                  onClick={() => setIsDeskDialogOpen(true)}
                   disabled={isAddingDesk}
                   className="flex items-center space-x-2 flex-1"
                   variant="outline"
                 >
-                  {isAddingDesk ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <MonitorSpeaker className="h-4 w-4" />
-                  )}
-                  <span>{isAddingDesk ? 'Adding...' : 'Add Desk'}</span>
+                  <MonitorSpeaker className="h-4 w-4" />
+                  <span>Add Desk</span>
                 </Button>
                 
                 <Button 
@@ -535,7 +544,7 @@ export default function AdminTokenPage() {
               {tokens.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No tokens created yet.</p>
-                  <p className="text-sm">Click &quot;Create Token&quot; to get started.</p>
+                  <p className="text-sm">Click "Create Token" to get started.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -576,7 +585,7 @@ export default function AdminTokenPage() {
               {desks.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No desks created yet.</p>
-                  <p className="text-sm">Click &quot;Add Desk&quot; to get started.</p>
+                  <p className="text-sm">Click "Add Desk" to get started.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -585,6 +594,8 @@ export default function AdminTokenPage() {
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium text-sm">Desk #</th>
                         <th className="text-left p-2 font-medium text-sm">Name</th>
+                        <th className="text-left p-2 font-medium text-sm">Operator</th>
+                        <th className="text-left p-2 font-medium text-sm">Tokens Served</th>
                         <th className="text-left p-2 font-medium text-sm">Status</th>
                         <th className="text-left p-2 font-medium text-sm">Created</th>
                         <th className="text-left p-2 font-medium text-sm">Actions</th>
@@ -597,6 +608,12 @@ export default function AdminTokenPage() {
                             #{desk.desk_number}
                           </td>
                           <td className="p-2 text-sm">{desk.name}</td>
+                          <td className="p-2 text-sm font-medium">{desk.operator_name}</td>
+                          <td className="p-2 text-sm">
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                              {desk.total_tokens_served}
+                            </span>
+                          </td>
                           <td className="p-2 text-sm">
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               desk.is_active 
@@ -686,6 +703,64 @@ export default function AdminTokenPage() {
                   </>
                 ) : (
                   'Create Token'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Desk Dialog */}
+        <Dialog open={isDeskDialogOpen} onOpenChange={setIsDeskDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add New Desk</DialogTitle>
+              <DialogDescription>
+                Enter the operator name for the new desk. Desk #{deskCounter ? deskCounter.last_desk_number + 1 : 1} will be created.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="operator" className="text-right">
+                  Operator Name
+                </Label>
+                <Input
+                  id="operator"
+                  value={operatorName}
+                  onChange={(e) => setOperatorName(e.target.value)}
+                  placeholder="Enter operator name"
+                  className="col-span-3"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isAddingDesk) {
+                      addDesk();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setIsDeskDialogOpen(false);
+                  setOperatorName('');
+                }}
+                disabled={isAddingDesk}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                onClick={addDesk}
+                disabled={isAddingDesk || !operatorName.trim()}
+              >
+                {isAddingDesk ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Add Desk'
                 )}
               </Button>
             </DialogFooter>
