@@ -544,7 +544,7 @@ export default function AdminTokenPage() {
               {tokens.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No tokens created yet.</p>
-                  <p className="text-sm">Click "Create Token" to get started.</p>
+                  <p className="text-sm">Click &quot;Create Token&quot; to get started.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -585,7 +585,7 @@ export default function AdminTokenPage() {
               {desks.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No desks created yet.</p>
-                  <p className="text-sm">Click "Add Desk" to get started.</p>
+                  <p className="text-sm">Click &quot;Add Desk&quot; to get started.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
