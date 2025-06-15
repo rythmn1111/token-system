@@ -15,9 +15,7 @@ import {
   CheckCircle, 
   AlertCircle, 
   Loader2,
-  RefreshCw,
-  Play,
-  Pause 
+  RefreshCw
 } from 'lucide-react';
 
 interface Token {
@@ -49,11 +47,15 @@ interface DeskWithToken extends Desk {
   assigned_token?: Token;
 }
 
+interface SystemSettings {
+  auto_assign_enabled: boolean;
+}
+
 export default function DisplayPage() {
   const [desks, setDesks] = useState<DeskWithToken[]>([]);
   const [waitingTokens, setWaitingTokens] = useState<Token[]>([]);
   const [assignedTokens, setAssignedTokens] = useState<TokenWithDesk[]>([]);
-  const [isAutoAssignEnabled, setIsAutoAssignEnabled] = useState(true);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -88,6 +90,15 @@ export default function DisplayPage() {
 
       if (tokensError) throw tokensError;
 
+      // Fetch system settings
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('system_settings')
+        .select('auto_assign_enabled')
+        .eq('id', 1)
+        .single();
+
+      if (settingsError) throw settingsError;
+
       // Process the data to create relationships manually
       const processedDesks = desksData?.map(desk => ({
         ...desk,
@@ -108,6 +119,7 @@ export default function DisplayPage() {
       setDesks(processedDesks);
       setWaitingTokens(waitingTokensData);
       setAssignedTokens(assignedTokensData);
+      setSystemSettings(settingsData);
       setLastUpdate(new Date());
 
     } catch (error) {
@@ -120,7 +132,7 @@ export default function DisplayPage() {
 
   // Auto assignment algorithm
   const performAutoAssignment = useCallback(async () => {
-    if (!isAutoAssignEnabled || waitingTokens.length === 0) return;
+    if (!systemSettings?.auto_assign_enabled || waitingTokens.length === 0) return;
 
     try {
       // Find the first waiting token (FIFO)
@@ -168,7 +180,7 @@ export default function DisplayPage() {
       console.error('Error in auto assignment:', error);
       setAlert({ type: 'error', message: 'Failed to assign token automatically' });
     }
-  }, [waitingTokens, desks, isAutoAssignEnabled, fetchData]);
+  }, [waitingTokens, desks, systemSettings, fetchData]);
 
   // Mark token as completed and free up the desk
   const completeToken = async (tokenId: number, deskId: number) => {
@@ -211,14 +223,14 @@ export default function DisplayPage() {
 
   // Polling for auto-assignment every 3 seconds
   useEffect(() => {
-    if (!isAutoAssignEnabled) return;
+    if (!systemSettings?.auto_assign_enabled) return;
 
     const interval = setInterval(() => {
       performAutoAssignment();
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [performAutoAssignment, isAutoAssignEnabled]);
+  }, [performAutoAssignment, systemSettings?.auto_assign_enabled]);
 
   // Refresh data every 5 seconds
   useEffect(() => {
@@ -254,14 +266,14 @@ export default function DisplayPage() {
               <p className="text-gray-600">Real-time token assignment and desk status</p>
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setIsAutoAssignEnabled(!isAutoAssignEnabled)}
-                variant={isAutoAssignEnabled ? "default" : "outline"}
-                className="flex items-center space-x-2"
-              >
-                {isAutoAssignEnabled ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                <span>{isAutoAssignEnabled ? 'Auto-Assign ON' : 'Auto-Assign OFF'}</span>
-              </Button>
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  systemSettings?.auto_assign_enabled ? 'bg-green-500' : 'bg-red-500'
+                }`}></div>
+                <span className="text-sm font-medium">
+                  Auto-Assign: {systemSettings?.auto_assign_enabled ? 'ON' : 'OFF'}
+                </span>
+              </div>
               <Button
                 onClick={fetchData}
                 variant="outline"
@@ -498,7 +510,7 @@ export default function DisplayPage() {
         {/* Footer */}
         <div className="mt-6 text-center text-sm text-gray-500">
           <p>Last updated: {lastUpdate.toLocaleTimeString()} | 
-            Auto-assignment: {isAutoAssignEnabled ? 'Enabled' : 'Disabled'} | 
+            Auto-assignment: {systemSettings?.auto_assign_enabled ? 'Enabled' : 'Disabled'} | 
             Auto-refresh every 5 seconds
           </p>
         </div>

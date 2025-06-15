@@ -16,13 +16,15 @@ import {
   AlertDescription,
 } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, RotateCcw, CheckCircle, AlertCircle, MonitorSpeaker, Trash2 } from 'lucide-react';
-import { supabase } from '../../utils/supabase';
+import { Loader2, Plus, RotateCcw, CheckCircle, AlertCircle, MonitorSpeaker, Trash2, Play, Pause } from 'lucide-react';
+import { supabase } from '@/utils/supabase';
 
 interface Token {
   id: number;
   token_number: number;
   name: string;
+  status: 'waiting' | 'assigned' | 'completed' | 'paid';
+  assigned_desk_id: number | null;
   created_at: string;
 }
 
@@ -36,12 +38,18 @@ interface Desk {
   name: string;
   operator_name: string;
   total_tokens_served: number;
+  status: 'free' | 'occupied' | 'maintenance';
+  assigned_token_id: number | null;
   is_active: boolean;
   created_at: string;
 }
 
 interface DeskCounter {
   last_desk_number: number;
+}
+
+interface SystemSettings {
+  auto_assign_enabled: boolean;
 }
 
 export default function AdminTokenPage() {
@@ -58,8 +66,13 @@ export default function AdminTokenPage() {
   const [desks, setDesks] = useState<Desk[]>([]);
   const [tokenCounter, setTokenCounter] = useState<TokenCounter | null>(null);
   const [deskCounter, setDeskCounter] = useState<DeskCounter | null>(null);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  const [isTogglingAutoAssign, setIsTogglingAutoAssign] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   // Fetch tokens and counter on component mount
   useEffect(() => {
@@ -67,6 +80,7 @@ export default function AdminTokenPage() {
     fetchTokenCounter();
     fetchDesks();
     fetchDeskCounter();
+    fetchSystemSettings();
   }, []);
 
   // Auto-hide alerts after 5 seconds
@@ -140,6 +154,54 @@ export default function AdminTokenPage() {
       setAlert({ type: 'error', message: 'Failed to fetch desk counter' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSystemSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('auto_assign_enabled')
+        .eq('id', 1)
+        .single();
+
+      if (error) throw error;
+      setSystemSettings(data);
+    } catch (error) {
+      console.error('Error fetching system settings:', error);
+      setAlert({ type: 'error', message: 'Failed to fetch system settings' });
+    }
+  };
+
+  const toggleAutoAssign = async () => {
+    if (!systemSettings) return;
+
+    setIsTogglingAutoAssign(true);
+
+    try {
+      const newStatus = !systemSettings.auto_assign_enabled;
+
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ 
+          auto_assign_enabled: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1);
+
+      if (error) throw error;
+
+      setSystemSettings({ auto_assign_enabled: newStatus });
+      setAlert({ 
+        type: 'success', 
+        message: `Auto-assignment ${newStatus ? 'enabled' : 'disabled'}` 
+      });
+
+    } catch (error) {
+      console.error('Error toggling auto-assign:', error);
+      setAlert({ type: 'error', message: 'Failed to toggle auto-assignment' });
+    } finally {
+      setIsTogglingAutoAssign(false);
     }
   };
 
@@ -370,15 +432,68 @@ export default function AdminTokenPage() {
     }
   };
 
+  const openAssignDialog = (token: Token) => {
+    if (token.status !== 'waiting') {
+      setAlert({ type: 'error', message: 'Only waiting tokens can be assigned' });
+      return;
+    }
+    setSelectedToken(token);
+    setIsAssignDialogOpen(true);
+  };
+
+  const manualAssign = async (deskId: number) => {
+    if (!selectedToken) return;
+    setIsAssigning(true);
+    try {
+      const now = new Date().toISOString();
+      const selectedDesk = desks.find(desk => desk.id === deskId);
+      if (!selectedDesk) throw new Error('Desk not found');
+      // Update token status
+      const { error: tokenError } = await supabase
+        .from('tokens')
+        .update({
+          status: 'assigned',
+          assigned_desk_id: deskId,
+          assigned_at: now
+        })
+        .eq('id', selectedToken.id);
+      if (tokenError) throw tokenError;
+      // Update desk status
+      const { error: deskError } = await supabase
+        .from('desks')
+        .update({
+          status: 'occupied',
+          assigned_token_id: selectedToken.id,
+          assigned_at: now
+        })
+        .eq('id', deskId);
+      if (deskError) throw deskError;
+      // Refresh data
+      await fetchTokens();
+      await fetchDesks();
+      setAlert({
+        type: 'success',
+        message: `Token #${selectedToken.token_number} (${selectedToken.name}) assigned to ${selectedDesk.name}`
+      });
+      setIsAssignDialogOpen(false);
+      setSelectedToken(null);
+    } catch (error) {
+      console.error('Error manually assigning token:', error);
+      setAlert({ type: 'error', message: 'Failed to assign token manually' });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
   if (isLoading) {
-    return (
+    return <>
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex items-center space-x-2">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading...</span>
         </div>
       </div>
-    );
+    </>;
   }
 
   return (
@@ -386,8 +501,32 @@ export default function AdminTokenPage() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Token Management Admin</h1>
-          <p className="text-gray-600">Create and manage tokens for your system</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Token Management Admin</h1>
+              <p className="text-gray-600">Create and manage tokens for your system</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Button
+                onClick={toggleAutoAssign}
+                disabled={isTogglingAutoAssign}
+                variant={systemSettings?.auto_assign_enabled ? "default" : "outline"}
+                className="flex items-center space-x-2"
+              >
+                {isTogglingAutoAssign ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : systemSettings?.auto_assign_enabled ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                <span>
+                  {isTogglingAutoAssign ? 'Updating...' : 
+                   systemSettings?.auto_assign_enabled ? 'Auto-Assign ON' : 'Auto-Assign OFF'}
+                </span>
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Alert */}
@@ -553,7 +692,9 @@ export default function AdminTokenPage() {
                       <tr className="border-b">
                         <th className="text-left p-2 font-medium text-sm">Token #</th>
                         <th className="text-left p-2 font-medium text-sm">Name</th>
+                        <th className="text-left p-2 font-medium text-sm">Status</th>
                         <th className="text-left p-2 font-medium text-sm">Created</th>
+                        <th className="text-left p-2 font-medium text-sm">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -563,8 +704,35 @@ export default function AdminTokenPage() {
                             #{token.token_number}
                           </td>
                           <td className="p-2 text-sm">{token.name}</td>
+                          <td className="p-2 text-sm">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              token.status === 'waiting' 
+                                ? 'bg-yellow-100 text-yellow-800' 
+                                : token.status === 'assigned'
+                                ? 'bg-blue-100 text-blue-800'
+                                : token.status === 'completed'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}>
+                              {token.status === 'waiting' ? 'Waiting' :
+                               token.status === 'assigned' ? 'Assigned' :
+                               token.status === 'completed' ? 'Completed' : 'Paid'}
+                            </span>
+                          </td>
                           <td className="p-2 text-gray-600 text-xs">
                             {new Date(token.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="p-2">
+                            {token.status === 'waiting' && (
+                              <Button
+                                onClick={() => openAssignDialog(token)}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs px-2 py-1 h-6"
+                              >
+                                Assign
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -762,6 +930,41 @@ export default function AdminTokenPage() {
                 ) : (
                   'Add Desk'
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign Dialog */}
+        <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Assign Token to Desk</DialogTitle>
+              <DialogDescription>
+                {selectedToken ? `Assign Token #${selectedToken.token_number} (${selectedToken.name}) to a desk:` : 'No token selected.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              {desks.filter(desk => desk.status === 'free' && desk.is_active).length === 0 ? (
+                <div className="text-gray-500 text-center">No free desks available.</div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {desks.filter(desk => desk.status === 'free' && desk.is_active).map(desk => (
+                    <Button
+                      key={desk.id}
+                      onClick={() => manualAssign(desk.id)}
+                      disabled={isAssigning}
+                      className="justify-start"
+                    >
+                      {desk.name} (Operator: {desk.operator_name})
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAssignDialogOpen(false)} disabled={isAssigning}>
+                Cancel
               </Button>
             </DialogFooter>
           </DialogContent>
