@@ -18,7 +18,7 @@ import {
   RefreshCw,
   CreditCard,
   Receipt,
-//   Calendar
+  // Calendar
 } from 'lucide-react';
 
 interface Token {
@@ -45,7 +45,6 @@ interface TokenWithDesk extends Token {
 
 export default function FeesPage() {
   const [completedTokens, setCompletedTokens] = useState<TokenWithDesk[]>([]);
-  const [paidTokens, setPaidTokens] = useState<TokenWithDesk[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingTokenId, setProcessingTokenId] = useState<number | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -73,17 +72,6 @@ export default function FeesPage() {
 
       if (completedError) throw completedError;
 
-      // Fetch paid tokens for today's summary
-      const today = new Date().toISOString().split('T')[0];
-      const { data: paidData, error: paidError } = await supabase
-        .from('tokens')
-        .select('*')
-        .eq('status', 'paid')
-        .gte('updated_at', `${today}T00:00:00`)
-        .order('updated_at', { ascending: false });
-
-      if (paidError) throw paidError;
-
       // Fetch desk information for tokens
       const { data: desksData, error: desksError } = await supabase
         .from('desks')
@@ -99,15 +87,7 @@ export default function FeesPage() {
           : null
       })) || [];
 
-      const processedPaid = paidData?.map(token => ({
-        ...token,
-        assigned_desk: token.assigned_desk_id 
-          ? desksData?.find(desk => desk.id === token.assigned_desk_id)
-          : null
-      })) || [];
-
       setCompletedTokens(processedCompleted);
-      setPaidTokens(processedPaid);
       setLastUpdate(new Date());
 
     } catch (error) {
@@ -118,37 +98,35 @@ export default function FeesPage() {
     }
   }, []);
 
-  // Mark token as paid
+  // Mark token as paid and delete it
   const markAsPaid = async (tokenId: number, tokenNumber: number, customerName: string) => {
-    if (!confirm(`Mark Token #${tokenNumber} (${customerName}) as paid?`)) {
+    if (!confirm(`Mark Token #${tokenNumber} (${customerName}) as paid and remove from system?`)) {
       return;
     }
 
     setProcessingTokenId(tokenId);
 
     try {
-      // Update token status to paid
-      const { error } = await supabase
+      // Simply delete the token from database
+      // The desk counter was already incremented when the token was marked as completed
+      const { error: deleteError } = await supabase
         .from('tokens')
-        .update({
-          status: 'paid',
-          updated_at: new Date().toISOString()
-        })
+        .delete()
         .eq('id', tokenId);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
       setAlert({ 
         type: 'success', 
-        message: `Token #${tokenNumber} (${customerName}) marked as paid!` 
+        message: `Token #${tokenNumber} (${customerName}) payment completed and removed from system!` 
       });
 
       // Refresh tokens
       await fetchTokens();
 
     } catch (error) {
-      console.error('Error marking token as paid:', error);
-      setAlert({ type: 'error', message: 'Failed to mark token as paid' });
+      console.error('Error processing payment:', error);
+      setAlert({ type: 'error', message: 'Failed to process payment' });
     } finally {
       setProcessingTokenId(null);
     }
@@ -270,8 +248,9 @@ export default function FeesPage() {
                   <CheckCircle className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-green-600">{paidTokens.length}</p>
+                  <p className="text-2xl font-bold text-green-600">0</p>
                   <p className="text-sm text-gray-600">Paid Today</p>
+                  <p className="text-xs text-gray-500">(Removed from system)</p>
                 </div>
               </div>
             </CardContent>
@@ -285,9 +264,9 @@ export default function FeesPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-blue-600">
-                    {completedTokens.length + paidTokens.length}
+                    {completedTokens.length}
                   </p>
-                  <p className="text-sm text-gray-600">Total Processed</p>
+                  <p className="text-sm text-gray-600">Total Pending</p>
                 </div>
               </div>
             </CardContent>
@@ -392,56 +371,47 @@ export default function FeesPage() {
             </CardContent>
           </Card>
 
-          {/* Today's Paid Tokens */}
+          {/* Completed Payments Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Receipt className="h-5 w-5" />
-                <span>Paid Today</span>
+                <span>Payment Info</span>
               </CardTitle>
-              <CardDescription>Recently processed payments</CardDescription>
+              <CardDescription>Information about payment processing</CardDescription>
             </CardHeader>
             <CardContent>
-              {paidTokens.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No payments processed today</p>
+              <div className="space-y-4">
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">Payment Process</span>
+                  </div>
+                  <p className="text-sm text-green-700">
+                    When tokens are marked as paid, they are automatically removed from the system 
+                    and the desk counter is updated.
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {paidTokens.map((token) => (
-                    <div
-                      key={token.id}
-                      className="p-3 rounded-lg border border-green-200 bg-green-50"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="p-1 bg-green-100 rounded">
-                            <CheckCircle className="h-3 w-3 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">Token #{token.token_number}</p>
-                            <p className="text-xs text-gray-600">{token.name}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-green-700 font-medium">PAID</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(token.updated_at).toLocaleTimeString()}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {token.assigned_desk && (
-                        <div className="mt-2 pt-2 border-t border-green-200">
-                          <p className="text-xs text-gray-600">
-                            Served by: {token.assigned_desk.operator_name}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <DollarSign className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">Desk Performance</span>
+                  </div>
+                  <p className="text-sm text-blue-700">
+                    Each successful payment increments the desk&apos;s total tokens served counter 
+                    for performance tracking.
+                  </p>
                 </div>
-              )}
+
+                {completedTokens.length === 0 && (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                    <p className="text-sm text-gray-600">
+                      No payments pending. All tokens have been processed!
+                    </p>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

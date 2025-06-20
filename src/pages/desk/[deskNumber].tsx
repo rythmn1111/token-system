@@ -137,13 +137,23 @@ export default function DeskPage() {
 
       if (tokenError) throw tokenError;
 
-      // Free up the desk
+      // Get current desk data to increment counter
+      const { data: currentDeskData, error: deskFetchError } = await supabase
+        .from('desks')
+        .select('total_tokens_served')
+        .eq('id', desk.id)
+        .single();
+
+      if (deskFetchError) throw deskFetchError;
+
+      // Free up the desk and increment the counter
       const { error: deskError } = await supabase
         .from('desks')
         .update({
           status: 'free',
           assigned_token_id: null,
-          assigned_at: null
+          assigned_at: null,
+          total_tokens_served: currentDeskData.total_tokens_served + 1
         })
         .eq('id', desk.id);
 
@@ -151,7 +161,7 @@ export default function DeskPage() {
 
       setAlert({ 
         type: 'success', 
-        message: `Token #${desk.assigned_token.token_number} completed successfully!` 
+        message: `Token #${desk.assigned_token.token_number} completed successfully! Counter updated.` 
       });
 
       // Refresh desk data

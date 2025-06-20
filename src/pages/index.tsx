@@ -98,7 +98,7 @@ export default function AdminTokenPage() {
       const { data, error } = await supabase
         .from('tokens')
         .select('*')
-        .order('token_number', { ascending: true });
+        .order('token_number', { ascending: false }); // Show newest first
 
       if (error) throw error;
       setTokens(data || []);
@@ -267,15 +267,35 @@ export default function AdminTokenPage() {
   };
 
   const resetTokenCounter = async () => {
-    if (!confirm('Are you sure you want to reset the token counter? This will set the counter back to 0.')) {
+    if (!confirm('Are you sure you want to reset the token counter? This will DELETE ALL TOKENS and set the counter back to 0.')) {
       return;
     }
 
     setIsResetting(true);
 
     try {
+      // Delete all tokens first
+      const { error: deleteTokensError } = await supabase
+        .from('tokens')
+        .delete()
+        .neq('id', 0); // Delete all rows
+
+      if (deleteTokensError) throw deleteTokensError;
+
+      // Reset all desks to free status and clear assigned tokens
+      const { error: resetDesksError } = await supabase
+        .from('desks')
+        .update({ 
+          status: 'free',
+          assigned_token_id: null,
+          assigned_at: null
+        })
+        .neq('id', 0); // Update all rows
+
+      if (resetDesksError) throw resetDesksError;
+
       // Reset the counter to 0
-      const { error: resetError } = await supabase
+      const { error: resetCounterError } = await supabase
         .from('token_counter')
         .update({ 
           last_token_number: 0,
@@ -283,11 +303,16 @@ export default function AdminTokenPage() {
         })
         .eq('id', 1);
 
-      if (resetError) throw resetError;
+      if (resetCounterError) throw resetCounterError;
 
       // Update local state
+      setTokens([]);
       setTokenCounter({ last_token_number: 0 });
-      setAlert({ type: 'success', message: 'Token counter has been reset to 0' });
+      
+      // Refresh desks to show updated status
+      await fetchDesks();
+      
+      setAlert({ type: 'success', message: 'All tokens deleted and counter reset to 0' });
 
     } catch (error) {
       console.error('Error resetting token counter:', error);
@@ -486,14 +511,14 @@ export default function AdminTokenPage() {
   };
 
   if (isLoading) {
-    return <>
+    return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex items-center space-x-2">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading...</span>
         </div>
       </div>
-    </>;
+    );
   }
 
   return (
